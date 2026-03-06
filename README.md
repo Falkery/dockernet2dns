@@ -40,6 +40,8 @@ services:
       
       # --- Options ---
       - SYNC_INTERVAL=60
+      - RECORD_EXPIRY_TTL=
+      - RECORD_EXPIRY_REFRESH_BUFFER=
       - DRY_RUN=false
 ```
 
@@ -52,6 +54,8 @@ services:
 | `NETWORK_MAPPING` | *Required* | Comma separated list of `docker_network:dns_zone` |
 | `SYNC_INTERVAL` | `60` | How often to check for changes (in seconds) |
 | `CACHE_REFRESH_INTERVAL` | `3600` | How often to re-download the full zone from server to fix manual drift (seconds) |
+| `RECORD_EXPIRY_TTL` | *(disabled)* | Optional record expiry in seconds for created/updated records. Leave empty to disable expiry. |
+| `RECORD_EXPIRY_REFRESH_BUFFER` | *[same as SYNC_INTERVAL]* | Buffer time in seconds before expiry to trigger record refresh. When set to N, records are refreshed when they are N seconds away from expiry. Must be large enough to complete API calls (recommended: 10+ seconds). Leave empty to use SYNC_INTERVAL as buffer. |
 | `DRY_RUN` | `false` | If `true`, logs intended changes but does not call API |
 | `LOG_LEVEL` | `INFO` | Set to `DEBUG` for verbose logging (shows skipped records) |
 
@@ -61,6 +65,33 @@ services:
 2.  **Matches Network:** It checks if a container is attached to one of the networks defined in `NETWORK_MAPPING`.
 3.  **Determines Hostname:** It looks for a label `dns.hostname`. If not found, it falls back to the container name.
 4.  **Syncs:** If the IP in Docker is different from the DNS record, it updates Technitium.
+
+## Record Expiry & Proactive Refresh
+
+When `RECORD_EXPIRY_TTL` is enabled, records are automatically deleted by Technitium after the specified time. To prevent gaps in DNS availability, dockernet2dns proactively refreshes records before they expire using a **dynamic wait mechanism**.
+
+**How the refresh works:**
+- The main loop calculates the next required wake time: either the next sync interval OR the next expiry deadline (whichever comes first)
+- Records are refreshed when they are `RECORD_EXPIRY_REFRESH_BUFFER` seconds away from expiry
+- This happens **independently of SYNC_INTERVAL** - the loop wakes specifically for expiry events
+- Each refresh resets the expiry timer on the Technitium server
+- The refresh buffer must be large enough to complete API calls before actual expiry (10+ seconds recommended)
+
+**Example:**
+```
+SYNC_INTERVAL=60
+RECORD_EXPIRY_TTL=300
+RECORD_EXPIRY_REFRESH_BUFFER=60
+
+=> Records refreshed when they are 60 seconds from expiry
+=> With 5-minute expiry, records stay fresh indefinitely
+=> The loop wakes at whichever comes first: next sync (60s) or next expiry (varies)
+```
+
+**Configuration notes:**
+- If `RECORD_EXPIRY_REFRESH_BUFFER` is very small (< 10s), you may see warnings about insufficient API call time
+- If buffer exceeds the expiry TTL, records will refresh immediately after creation
+- The dynamic wait mechanism ensures records never expire, regardless of SYNC_INTERVAL
 
 ## Usage Tips
 
