@@ -34,14 +34,16 @@ services:
       - TECHNITIUM_TOKEN=your_api_token_here
       
       # --- Network Mapping ---
-      # format: "DockerNetworkName:DNSZoneName"
-      # multiple: "net1:zone1,net2:zone2"
-      - NETWORK_MAPPING=ipvlan_iot:iot.lan,ipvlan_server:server.lan
+      # format: "DockerNetworkName:DNSZoneName[:managed]"
+      # multiple: "net1:zone1:managed,net2:zone2"
+      - NETWORK_MAPPING=ipvlan_iot:iot.lan:managed,ipvlan_server:server.lan
       
       # --- Options ---
       - SYNC_INTERVAL=60
       - RECORD_EXPIRY_TTL=
       - RECORD_EXPIRY_REFRESH_BUFFER=
+      - DEAD_CONTAINER_STRATEGY=ignore
+      - SHORTENED_EXPIRY_TTL=60
       - DRY_RUN=false
 ```
 
@@ -51,11 +53,13 @@ services:
 | :--- | :--- | :--- |
 | `TECHNITIUM_URL` | *Required* | Base URL of your DNS server (e.g. `http://10.0.0.1:5380`) |
 | `TECHNITIUM_TOKEN` | *Required* | API Token with Write permissions |
-| `NETWORK_MAPPING` | *Required* | Comma separated list of `docker_network:dns_zone` |
+| `NETWORK_MAPPING` | *Required* | Comma separated list of `docker_network:dns_zone[:managed]`. Append `:managed` to enable full zone management (auto-deletes manual A records not tied to a running container). |
 | `SYNC_INTERVAL` | `60` | How often to check for changes (in seconds) |
 | `CACHE_REFRESH_INTERVAL` | `3600` | How often to re-download the full zone from server to fix manual drift (seconds) |
 | `RECORD_EXPIRY_TTL` | *(disabled)* | Optional record expiry in seconds for created/updated records. Leave empty to disable expiry. |
 | `RECORD_EXPIRY_REFRESH_BUFFER` | *[same as SYNC_INTERVAL]* | Buffer time in seconds before expiry to trigger record refresh. When set to N, records are refreshed when they are N seconds away from expiry. Must be large enough to complete API calls (recommended: 10+ seconds). Leave empty to use SYNC_INTERVAL as buffer. |
+| `DEAD_CONTAINER_STRATEGY` | `ignore` | How to handle missing containers: `ignore`, `shorten`, or `remove`. This only applies to records created by this script (tracked via comments), protecting your manual records. |
+| `SHORTENED_EXPIRY_TTL` | `60` | If strategy is `shorten`, the new expiry time to set for the dead container. |
 | `DRY_RUN` | `false` | If `true`, logs intended changes but does not call API |
 | `LOG_LEVEL` | `INFO` | Set to `DEBUG` for verbose logging (shows skipped records) |
 
